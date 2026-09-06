@@ -1,0 +1,21 @@
+# X (Twitter) Account Pool for twscrape
+# ──────────────────────────────────────────────────────────────
+# This file is NEVER committed to version control.
+# Copy this to accounts.txt and fill in real credentials.
+#
+# ⚠️  Use dedicated burner accounts only — scraping carries a
+#     real risk of account suspension. Do NOT use personal accounts.
+#
+# FORMAT (one account per line):
+#
+#   Login-based (may trigger verification — less reliable):
+#     username:password:email:email_password
+#
+#   Cookie-based (recommended — more stable):
+#     username:password:email:email_password:cookies=auth_token=XXXX;ct0=YYYY
+#
+# Lines starting with # are ignored. Blank lines are ignored.
+#
+# EXAMPLES:
+# scraper_bot1:P@ssw0rd123:bot1@example.com:mailpass1
+# scraper_bot2:P@ssw0rd456:bot2@example.com:mailpass2:cookies=auth_token=abc123;ct0=def456

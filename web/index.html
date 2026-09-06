@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audience Intelligence — AI Research & Telemetry Studio</title>
+  <meta name="description" content="State-of-the-art social intelligence canvas for live X data extraction, sentiment analysis, demographic modeling, trend prediction, and network mapping.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="dark-theme framer-theme">
+  <!-- Ambient Luminous Background Orbs (Framer Aura) -->
+  <div class="ambient-glow ambient-top-left" aria-hidden="true"></div>
+  <div class="ambient-glow ambient-top-right" aria-hidden="true"></div>
+  <div class="ambient-glow ambient-center" aria-hidden="true"></div>
+  <div class="grid-overlay" aria-hidden="true"></div>
+
+  <!-- Floating Island Glass Navigation Bar (Framer Style) -->
+  <div class="nav-island-wrapper">
+    <header class="app-header glass-island">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4l16 16M4 20L20 4"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">Audience Intelligence</span>
+          <span class="brand-badge">Stage 1 • Live Studio</span>
+        </div>
+      </div>
+
+      <!-- Integrated Framer Telemetry Pills -->
+      <div class="header-telemetry-bar">
+        <div class="telemetry-pill" id="pool-status-pill">
+          <span class="status-dot dot-green"></span>
+          <span id="pool-status-text">Checking Pool...</span>
+          <span id="accounts-file-status" style="display:none;"></span>
+          <span id="accounts-file-badge" style="display:none;"></span>
+        </div>
+
+        <div class="telemetry-pill" title="Circuit Breaker Status">
+          <span class="pill-label">Circuit</span>
+          <span class="status-tag tag-success" id="cb-state-badge">CLOSED</span>
+          <span id="cb-fail-ratio" style="display:none;">0/5</span>
+          <div id="cb-progress-bar" style="display:none;"></div>
+          <span id="cb-cooldown-caption" style="display:none;"></span>
+        </div>
+
+        <div class="telemetry-pill">
+          <span class="pill-label">Ingested</span>
+          <span class="pill-val" id="session-count-badge">0 Posts</span>
+          <span class="pill-sep">/</span>
+          <span class="pill-val" id="session-edges-count">0 Edges</span>
+        </div>
+
+        <div class="telemetry-pill latency-pill">
+          <span class="pill-label">Latency</span>
+          <span class="pill-val" id="last-latency-val">--</span>
+        </div>
+
+        <button id="btn-open-accounts" class="btn-framer-primary" title="Configure Account Pool">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="7" r="4"></circle>
+            <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path>
+          </svg>
+          <span>Accounts</span>
+        </button>
+      </div>
+    </header>
+  </div>
+
+  <!-- Hero Header Section (Framer AI Look) -->
+  <section class="hero-section">
+    <div class="hero-badge">
+      <span class="badge-sparkle">✦</span>
+      <span>Framer-Engineered Intelligence Canvas • Stage 1 Live Pipeline</span>
+    </div>
+    <h1 class="hero-headline">
+      Audience Intelligence <span class="gradient-text">engineered for the canvas.</span>
+    </h1>
+    <p class="hero-subtitle">
+      Extract live public posts, extract graph edges, decode emotional polarity, predict viral velocity, and map influencer clusters in real time.
+    </p>
+
+    <!-- Quick Prompt Preset Chips -->
+    <div class="prompt-presets-bar">
+      <span class="preset-label">Quick Prompts:</span>
+      <div class="preset-chips">
+        <button type="button" class="preset-chip" data-query="artificial intelligence">
+          <span class="chip-emoji">🤖</span> artificial intelligence
+        </button>
+        <button type="button" class="preset-chip" data-query="#tech #startups">
+          <span class="chip-emoji">🚀</span> #tech #startups
+        </button>
+        <button type="button" class="preset-chip" data-query="deep learning agents">
+          <span class="chip-emoji">⚡</span> deep learning agents
+        </button>
+        <button type="button" class="preset-chip" data-query="web3 open source">
+          <span class="chip-emoji">💎</span> web3 open source
+        </button>
+        <button type="button" class="preset-chip" data-query="renewable energy transition">
+          <span class="chip-emoji">🌱</span> renewable energy
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Container -->
+  <main class="main-container">
+    <!-- Workspace Grid -->
+    <div class="workspace-grid">
+      <!-- Left Column: Controls & Minimal Console (Bento Column) -->
+      <section class="controls-column">
+        <!-- Query Form Card (Framer Bento Card) -->
+        <div class="panel-card form-card bento-card">
+          <div class="panel-card-header">
+            <div class="card-title-group">
+              <span class="card-icon">⚡</span>
+              <h2>Query Controller</h2>
+            </div>
+            <span class="card-sub-badge">Twscrape Pool</span>
+          </div>
+
+          <form id="scraper-form" class="scraper-form">
+            <div class="form-group">
+              <label for="query-input">
+                <span>Search Query / Keyword / Hashtag</span>
+                <span class="label-hint">Press Enter ↵</span>
+              </label>
+              <div class="search-input-box framer-input-box">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <path d="m21 21-4.3-4.3"></path>
+                </svg>
+                <input type="text" id="query-input" placeholder="e.g. artificial intelligence, #tech" required value="artificial intelligence">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col-half">
+                <label for="limit-input">Tweet Volume</label>
+                <div class="custom-select-wrapper">
+                  <select id="limit-input" class="minimal-select">
+                    <option value="5">5 tweets (Fast)</option>
+                    <option value="10" selected>10 tweets (Standard)</option>
+                    <option value="25">25 tweets (Deep)</option>
+                    <option value="50">50 tweets (Maximum)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group col-half">
+                <label for="since-input">Since Date</label>
+                <input type="date" id="since-input" class="minimal-date">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <span>Intelligence Engines</span>
+                <span class="label-hint">Multi-modal Pipeline</span>
+              </label>
+              <div class="engine-chips-grid">
+                <label class="engine-chip">
+                  <input type="checkbox" id="chk-sentiment" checked>
+                  <span class="chip-content">
+                    <span class="chip-icon">🎭</span>
+                    <span class="chip-text">Sentiment</span>
+                  </span>
+                </label>
+                <label class="engine-chip">
+                  <input type="checkbox" id="chk-demographics" checked>
+                  <span class="chip-content">
+                    <span class="chip-icon">👥</span>
+                    <span class="chip-text">Demographics</span>
+                  </span>
+                </label>
+                <label class="engine-chip">
+                  <input type="checkbox" id="chk-trends" checked>
+                  <span class="chip-content">
+                    <span class="chip-icon">📈</span>
+                    <span class="chip-text">Trends & Topics</span>
+                  </span>
+                </label>
+                <label class="engine-chip">
+                  <input type="checkbox" id="chk-network" checked>
+                  <span class="chip-content">
+                    <span class="chip-icon">🕸️</span>
+                    <span class="chip-text">Network & KOLs</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <button type="submit" id="btn-run-scrape" class="btn-primary-framer">
+              <span class="btn-glow-layer"></span>
+              <span class="btn-spinner" id="btn-spinner" style="display: none;"></span>
+              <span class="btn-content-flex">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <span class="btn-text" id="btn-text">Execute Intelligence Pipeline</span>
+              </span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Collapsible Sleek Telemetry Console (Framer Drawer) -->
+        <details class="panel-card console-drawer bento-card" open>
+          <summary class="console-drawer-header">
+            <div class="drawer-title-group">
+              <span class="pulse-dot"></span>
+              <span class="drawer-title">Live Scraper Telemetry</span>
+            </div>
+            <button id="btn-clear-logs" class="btn-link-xs" type="button">Clear</button>
+          </summary>
+          <div class="console-output minimal-scrollbar" id="console-output">
+            <div class="log-entry info">
+              <span class="log-time">[System]</span>
+              <span class="log-msg">Ready. Click 'Execute Intelligence Pipeline' to run live scrape.</span>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- Right Column: Results & Inspector -->
+      <section class="results-column">
+        <div class="panel-card results-card bento-card">
+          <!-- Framer Segmented Pill Tab Bar -->
+          <div class="panel-header-tabs">
+            <div class="tabs-segmented-wrapper minimal-scrollbar">
+              <div class="tabs-group">
+                <button class="tab-btn active" id="tab-btn-feed" data-target="feed-view">
+                  <span>Feed</span> <span class="tab-badge" id="feed-count">0</span>
+                </button>
+                <button class="tab-btn" id="tab-btn-sentiment" data-target="sentiment-view">
+                  <span>🎭 Sentiment</span>
+                </button>
+                <button class="tab-btn" id="tab-btn-demographics" data-target="demographics-view">
+                  <span>👥 Demographics</span>
+                </button>
+                <button class="tab-btn" id="tab-btn-trends" data-target="trends-view">
+                  <span>📈 Trends & Topics</span>
+                </button>
+                <button class="tab-btn" id="tab-btn-network" data-target="network-view">
+                  <span>🕸️ Network & KOLs</span>
+                </button>
+                <button class="tab-btn" id="tab-btn-edges" data-target="edges-view">
+                  <span>Edges</span> <span class="tab-badge" id="edges-count">0</span>
+                </button>
+                <button class="tab-btn" id="tab-btn-raw" data-target="raw-view">
+                  <span>JSON</span>
+                </button>
+              </div>
+            </div>
+            <div class="results-actions">
+              <button id="btn-export-json" class="btn-action-sm" title="Copy results JSON">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copy JSON</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Feed View -->
+          <div class="tab-pane active" id="feed-view">
+            <div class="empty-state" id="feed-empty-state">
+              <div class="empty-icon-halo">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+              </div>
+              <h4>No tweets scraped yet</h4>
+              <p>Configure your search query on the left or select a prompt preset above to stream live public posts.</p>
+            </div>
+            <div class="tweet-stream" id="tweet-stream" style="display: none;"></div>
+          </div>
+
+          <!-- Edges View -->
+          <div class="tab-pane" id="edges-view" style="display: none;">
+            <div class="empty-state" id="edges-empty-state">
+              <div class="empty-icon-halo">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                  <circle cx="18" cy="5" r="3"></circle>
+                  <circle cx="6" cy="12" r="3"></circle>
+                  <circle cx="18" cy="19" r="3"></circle>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+              </div>
+              <h4>No graph edges detected</h4>
+              <p>Edges are derived automatically when scraped posts contain direct replies, quotes, or mention links.</p>
+            </div>
+            <div class="edges-table-container" id="edges-table-container" style="display: none;">
+              <table class="edges-table">
+                <thead>
+                  <tr>
+                    <th>Source User ID</th>
+                    <th>Type</th>
+                    <th>Target User ID</th>
+                    <th>Post ID</th>
+                    <th>Created At</th>
+                  </tr>
+                </thead>
+                <tbody id="edges-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sentiment Intelligence View -->
+          <div class="tab-pane" id="sentiment-view" style="display: none;">
+            <div class="empty-state" id="sentiment-empty-state">
+              <div class="empty-icon-halo">🎭</div>
+              <h4>No sentiment data yet</h4>
+              <p>Run a scrape with Sentiment analysis enabled to observe multi-class emotional breakdowns.</p>
+            </div>
+            <div id="sentiment-dashboard" style="display: none;">
+              <div class="intel-grid">
+                <!-- Sentiment Mix Gauge -->
+                <div class="intel-card">
+                  <div class="intel-card-header"><span class="intel-title">Sentiment Mix</span></div>
+                  <div id="sentiment-mix-bars" class="stacked-bars"></div>
+                </div>
+                <!-- Emotion Breakdown -->
+                <div class="intel-card">
+                  <div class="intel-card-header"><span class="intel-title">Emotion Breakdown</span></div>
+                  <div id="emotion-mix-list" class="dist-list"></div>
+                </div>
+              </div>
+              <!-- Sarcasm Meter -->
+              <div class="intel-card" style="margin-top: 14px;">
+                <div class="intel-card-header"><span class="intel-title">Average Sarcasm Probability</span></div>
+                <div class="sarcasm-meter">
+                  <div class="sarcasm-bar-bg"><div class="sarcasm-bar-fill" id="sarcasm-bar-fill"></div></div>
+                  <span class="sarcasm-val" id="sarcasm-val">0%</span>
+                </div>
+                <div class="sub-caption">Ensemble: model contradiction + rule-based cue detection. Displayed as probability, not ground truth.</div>
+              </div>
+              <!-- Per-tweet sentiment cards -->
+              <h4 style="margin-top: 18px; margin-bottom: 10px; color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; letter-spacing: -0.01em;">Per-Post Sentiment Breakdown</h4>
+              <div id="sentiment-per-tweet" class="tweet-stream"></div>
+            </div>
+          </div>
+
+          <!-- Demographics Intelligence View -->
+          <div class="tab-pane" id="demographics-view" style="display: none;">
+            <div class="empty-state" id="demographics-empty-state">
+              <div class="empty-icon-halo">👥</div>
+              <h4>No demographics data yet</h4>
+              <p>Run a scrape with Demographics analysis enabled. Results are strictly aggregated cohorts.</p>
+            </div>
+            <div id="demographics-dashboard" style="display: none;">
+              <div class="privacy-notice">
+                <span class="shield-icon">🔒</span>
+                <span>All demographic modeling is aggregated to privacy-preserving cohort counts. Individual user profiling is strictly prohibited.</span>
+              </div>
+              <div class="intel-grid">
+                <div class="intel-card">
+                  <div class="intel-card-header"><span class="intel-title">Age Distribution</span></div>
+                  <div id="age-dist" class="dist-list"></div>
+                </div>
+                <div class="intel-card">
+                  <div class="intel-card-header"><span class="intel-title">Geography</span></div>
+                  <div id="geo-dist" class="dist-list"></div>
+                </div>
+              </div>
+              <div class="intel-grid" style="margin-top: 14px;">
+                <div class="intel-card">
+                  <div class="intel-card-header"><span class="intel-title">Language</span></div>
+                  <div id="lang-dist" class="dist-list"></div>
+                </div>
+                <div class="intel-card">
+                  <div class="intel-card-header"><span class="intel-title">Profession Category</span></div>
+                  <div id="prof-dist" class="dist-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Trends & Topic Intelligence View -->
+          <div class="tab-pane" id="trends-view" style="display: none;">
+            <div class="empty-state" id="trends-empty-state">
+              <div class="empty-icon-halo">📈</div>
+              <h4>No trend data yet</h4>
+              <p>Run a scrape with 'Trends & Topics' enabled to detect real-time bursts, predicted virality, and topic clusters.</p>
+            </div>
+            <div id="trends-dashboard" style="display: none;">
+              <!-- Highlights Banner -->
+              <div class="trend-highlights-banner">
+                <div class="highlight-item">
+                  <span class="highlight-label">Analyzed Timeline</span>
+                  <span class="highlight-val" id="trend-window-val">--</span>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-label">Dominant Rising Topic</span>
+                  <span class="highlight-val text-accent" id="trend-top-topic-val">--</span>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-label">Emergent Clusters</span>
+                  <span class="highlight-val text-purple" id="trend-cluster-count-val">0</span>
+                </div>
+              </div>
+
+              <!-- Rising Trends & Viral Predictions Grid -->
+              <div class="intel-grid" style="margin-top: 14px;">
+                <!-- Card: Top Rising Trends -->
+                <div class="intel-card">
+                  <div class="intel-card-header">
+                    <span class="intel-title">⚡ Rising Keywords & Hashtags</span>
+                    <span class="sub-caption">Velocity (Δ Vol / Baseline)</span>
+                  </div>
+                  <div id="rising-trends-list" class="trend-item-list"></div>
+                </div>
+
+                <!-- Card: Predicted Virality Ranking -->
+                <div class="intel-card">
+                  <div class="intel-card-header">
+                    <span class="intel-title">🔮 Predicted Viral Topics</span>
+                    <span class="sub-caption">Velocity + Acceleration + Reach</span>
+                  </div>
+                  <div id="predicted-viral-list" class="viral-prediction-list"></div>
+                </div>
+              </div>
+
+              <!-- Topic Clusters Section -->
+              <div class="intel-card" style="margin-top: 14px;">
+                <div class="intel-card-header">
+                  <span class="intel-title">🧩 Discovered Topic Clusters & Themes</span>
+                  <span class="sub-caption">Co-occurrence graph groupings</span>
+                </div>
+                <div id="topic-clusters-grid" class="clusters-grid"></div>
+              </div>
+
+              <!-- Chronological Discussion Shift Timeline -->
+              <div class="intel-card" style="margin-top: 14px;">
+                <div class="intel-card-header">
+                  <span class="intel-title">⏳ Chronological Discussion Shifts</span>
+                  <span class="sub-caption">Evolution from Early to Late phase</span>
+                </div>
+                <div id="discussion-shifts-timeline" class="shifts-timeline"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Network & Link Analysis View -->
+          <div class="tab-pane" id="network-view" style="display: none;">
+            <div class="empty-state" id="network-empty-state">
+              <div class="empty-icon-halo">🕸️</div>
+              <h4>No network graph yet</h4>
+              <p>Run a scrape to extract interaction edges, identify Key Opinion Leaders (KOLs), and map sentiment propagation.</p>
+            </div>
+            <div id="network-dashboard" style="display: none;">
+              <!-- Network Stats Bar -->
+              <div class="network-stats-bar">
+                <div class="stat-pill"><span class="stat-num" id="net-nodes-count">0</span> Users / Nodes</div>
+                <div class="stat-pill"><span class="stat-num" id="net-edges-count">0</span> Directed Edges</div>
+                <div class="stat-pill"><span class="stat-num" id="net-density-val">0.0</span> Graph Density</div>
+                <div class="stat-pill"><span class="stat-num" id="net-community-count">0</span> Communities</div>
+              </div>
+
+              <!-- Interactive Canvas Graph Card -->
+              <div class="intel-card" style="margin-top: 14px; position: relative;">
+                <div class="intel-card-header" style="justify-content: space-between; align-items: center;">
+                  <span class="intel-title">🌐 Interactive Interaction & Influence Network</span>
+                  <div class="canvas-controls">
+                    <button class="btn-ghost-sm" id="btn-graph-zoom-in" title="Zoom in">+</button>
+                    <button class="btn-ghost-sm" id="btn-graph-zoom-out" title="Zoom out">−</button>
+                    <button class="btn-ghost-sm" id="btn-graph-reset" title="Reset View">Reset</button>
+                  </div>
+                </div>
+
+                <div class="canvas-wrapper framer-canvas-wrapper">
+                  <canvas id="network-canvas" width="750" height="380"></canvas>
+                  <div id="canvas-tooltip" class="graph-tooltip" style="display: none;"></div>
+                </div>
+
+                <div class="canvas-legend">
+                  <div class="legend-item"><span class="legend-node-sample" style="background: #38bdf8;"></span> Cyan: Primary Cluster</div>
+                  <div class="legend-item"><span class="legend-node-sample" style="background: #10b981;"></span> Emerald: Positive Cohort</div>
+                  <div class="legend-item"><span class="legend-node-sample" style="background: #a855f7;"></span> Purple: Tech Amplifiers</div>
+                  <div class="legend-item"><span class="legend-node-sample" style="background: #f59e0b;"></span> Amber: Critical/Debate Cohort</div>
+                  <div class="legend-item legend-hint"><span>Node Size ∝ Influence Score • Drag nodes or pan canvas</span></div>
+                </div>
+              </div>
+
+              <!-- Key Opinion Leaders (KOLs) Leaderboard -->
+              <div class="intel-card" style="margin-top: 14px;">
+                <div class="intel-card-header">
+                  <span class="intel-title">👑 Key Opinion Leaders (KOLs) & High-Influence Nodes</span>
+                  <span class="sub-caption">Multi-metric centrality (PageRank, In-Degree, Betweenness)</span>
+                </div>
+                <div class="kol-table-container">
+                  <table class="kol-table">
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>User Handle</th>
+                        <th>Archetype</th>
+                        <th>Influence Score</th>
+                        <th>PageRank</th>
+                        <th>Authority (In)</th>
+                        <th>Amplifier (Out)</th>
+                        <th>Broker (Betweenness)</th>
+                        <th>Sentiment</th>
+                      </tr>
+                    </thead>
+                    <tbody id="kol-table-body"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- User Segments / Communities -->
+              <div class="intel-card" style="margin-top: 14px;">
+                <div class="intel-card-header">
+                  <span class="intel-title">👥 User Segments & Community Alignment</span>
+                  <span class="sub-caption">Modularity community detection</span>
+                </div>
+                <div id="communities-cards-grid" class="communities-grid"></div>
+              </div>
+
+              <!-- Trend & Sentiment Spread Cascade Timeline -->
+              <div class="intel-card" style="margin-top: 14px;">
+                <div class="intel-card-header">
+                  <span class="intel-title">🌊 Information & Sentiment Spread Cascade</span>
+                  <span class="sub-caption">Chronological propagation across user segments</span>
+                </div>
+                <div id="spread-cascade-timeline" class="cascade-timeline"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Raw JSON View -->
+          <div class="tab-pane" id="raw-view" style="display: none;">
+            <pre class="json-code-block" id="raw-json-viewer">// Raw scraped response payload will appear here...</pre>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Framer Sheet Modal: Account Pool Helper -->
+  <div class="modal-overlay" id="accounts-modal" style="display: none;">
+    <div class="modal-content framer-modal-sheet">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-badge-icon">🛡️</span>
+          <h3>X Account Pool Configuration</h3>
+        </div>
+        <button class="btn-close" id="btn-close-modal" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          <code>twscrape</code> distributes queries across authenticated accounts in <code>accounts.txt</code> to bypass single-account rate limits.
+        </p>
+
+        <div class="code-box">
+          <div class="code-box-header">
+            <span>Format Specification (accounts.txt)</span>
+            <span class="spec-tag">Recommended 2026</span>
+          </div>
+          <pre><code># 1. Cookie-based (Most stable session resilience):
+username:password:email:email_password:cookies=auth_token=XXXX;ct0=YYYY
+
+# 2. Credential-based (May prompt 2FA checkpoint):
+username:password:email:email_password</code></pre>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label for="accounts-content-input">
+            <span>Quick Update accounts.txt</span>
+            <span class="label-hint">One account per line</span>
+          </label>
+          <textarea id="accounts-content-input" rows="6" placeholder="username:password:email:email_password:cookies=..."></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-save-accounts" class="btn-framer-primary">Save to accounts.txt</button>
+          <button id="btn-cancel-modal" class="btn-framer-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

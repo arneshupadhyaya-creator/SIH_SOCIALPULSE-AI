@@ -1,0 +1,52 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: audience_intel_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: audience_intel
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d audience_intel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: audience_intel_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/audience_intel
+      SYNC_DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/audience_intel
+      ACCOUNTS_FILE: accounts.txt
+      LOG_LEVEL: INFO
+      SCRAPE_DELAY_MIN: 2.0
+      SCRAPE_DELAY_MAX: 5.0
+      CIRCUIT_BREAKER_THRESHOLD: 5
+      CIRCUIT_BREAKER_TIMEOUT: 300
+      DEVICE: cpu
+      HF_CACHE_DIR: /app/models_cache
+      TREND_WINDOW_MINUTES: 15
+      TREND_TOP_N: 20
+    volumes:
+      - .:/app
+      - hf_cache:/app/models_cache
+    command: >
+      sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"
+
+volumes:
+  timescale_data:
+  hf_cache:
