@@ -49,13 +49,15 @@ If you have **Docker Desktop** installed, this is the single fastest and easiest
 Open your terminal (PowerShell, Command Prompt, or Terminal) and run:
 
 ```bash
-# 1. Clone the repository
+# 1. Clone the repository and enter the SIH directory
 git clone https://github.com/BHAVYAGUPTA727/SIH-PS-26152.git
-cd SIH-PS-26152
+cd SIH-PS-26152/SIH
 
 # 2. Start everything in Docker
 docker compose up --build
 ```
+
+> 📌 *Note: If you have already opened the project directly in the `SIH` folder, you can simply run `docker compose up --build` immediately.*
 
 That's it! Once you see the logs showing `Application startup complete`, open your browser and go to:
 👉 **[http://localhost:8000](http://localhost:8000)**
@@ -88,8 +90,9 @@ Open your terminal or command line and run:
 
 ```bash
 git clone https://github.com/BHAVYAGUPTA727/SIH-PS-26152.git
-cd SIH-PS-26152
+cd SIH-PS-26152/SIH
 ```
+> 📌 *Note: If you already have your terminal open inside the `SIH` project directory, you are ready to proceed to Step 2.*
 
 ---
 
