@@ -1,0 +1,42 @@
+# --- Credentials & Secrets (NEVER commit) ---
+accounts.txt
+accounts.db
+.env
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# --- Virtual Environments ---
+venv/
+.venv/
+env/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- HuggingFace / ML model cache ---
+models_cache/
+.cache/
+
+# --- OS ---
+Thumbs.db
+.DS_Store
+
+# --- Docker ---
+*.log
+
+# --- Alembic ---
+# (migrations are committed, but __pycache__ inside is not)
+db/migrations/__pycache__/
+db/migrations/versions/__pycache__/
