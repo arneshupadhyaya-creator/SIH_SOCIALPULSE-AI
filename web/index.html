@@ -153,17 +153,76 @@
               </div>
 
               <div class="form-group col-half">
-                <label for="since-input">Since Date</label>
-                <input type="date" id="since-input" class="minimal-date">
+                <label for="comments-limit-input">Comments / Post</label>
+                <div class="custom-select-wrapper">
+                  <select id="comments-limit-input" class="minimal-select">
+                    <option value="3">3 comments (Fast)</option>
+                    <option value="5" selected>5 comments (Standard)</option>
+                    <option value="10">10 comments (Deep)</option>
+                    <option value="20">20 comments (Max)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Time Window Controls -->
+            <div class="form-group">
+              <label>
+                <span>Time Window</span>
+                <span class="label-hint">Scrape historical posts</span>
+              </label>
+              <div class="time-window-grid">
+                <div class="time-mode-tabs" id="time-mode-tabs">
+                  <button type="button" class="time-tab active" data-mode="none" id="time-tab-none">Latest</button>
+                  <button type="button" class="time-tab" data-mode="offset" id="time-tab-offset">From X hrs ago</button>
+                  <button type="button" class="time-tab" data-mode="older" id="time-tab-older">Older than X hrs</button>
+                  <button type="button" class="time-tab" data-mode="date" id="time-tab-date">By Date</button>
+                </div>
+
+                <!-- Latest (no filter) -->
+                <div class="time-panel" id="time-panel-none">
+                  <p class="time-hint">Fetches the most recent tweets matching your query.</p>
+                </div>
+
+                <!-- From X hours ago to now -->
+                <div class="time-panel" id="time-panel-offset" style="display:none;">
+                  <div class="range-row">
+                    <input type="range" id="offset-hours-range" min="0.5" max="48" step="0.5" value="0.5" class="time-range-slider">
+                    <span class="range-val-badge" id="offset-hours-val">0.5 hrs</span>
+                  </div>
+                  <p class="time-hint">Scrapes posts from <strong id="offset-hint-text">30 minutes</strong> ago up to now.</p>
+                </div>
+
+                <!-- Older than X hours -->
+                <div class="time-panel" id="time-panel-older" style="display:none;">
+                  <div class="range-row">
+                    <input type="range" id="older-hours-range" min="0.5" max="48" step="0.5" value="0.5" class="time-range-slider">
+                    <span class="range-val-badge" id="older-hours-val">0.5 hrs</span>
+                  </div>
+                  <p class="time-hint">Scrapes posts created <strong>before</strong> <strong id="older-hint-text">30 minutes</strong> ago.</p>
+                </div>
+
+                <!-- By date -->
+                <div class="time-panel" id="time-panel-date" style="display:none;">
+                  <input type="date" id="since-input" class="minimal-date" style="margin-top:6px;">
+                  <p class="time-hint" style="margin-top:6px;">Only return tweets on or after this date.</p>
+                </div>
               </div>
             </div>
 
             <div class="form-group">
               <label>
-                <span>Intelligence Engines</span>
+                <span>Intelligence & Ingestion Engines</span>
                 <span class="label-hint">Multi-modal Pipeline</span>
               </label>
               <div class="engine-chips-grid">
+                <label class="engine-chip">
+                  <input type="checkbox" id="chk-comments" checked>
+                  <span class="chip-content">
+                    <span class="chip-icon">💬</span>
+                    <span class="chip-text">Scrape Comments</span>
+                  </span>
+                </label>
                 <label class="engine-chip">
                   <input type="checkbox" id="chk-sentiment" checked>
                   <span class="chip-content">

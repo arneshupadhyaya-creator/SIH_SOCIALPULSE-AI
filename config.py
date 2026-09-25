@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     scrape_delay_max: float = 5.0
     circuit_breaker_threshold: int = 5   # errors in window before tripping
     circuit_breaker_timeout: int = 300   # seconds to pause after tripping
+    scrape_comments: bool = True         # Whether to scrape comments/replies on each post
+    max_comments_per_post: int = 10      # Maximum comments/replies scraped per post
+    scrape_comments_delay: float = 1.0   # Polite delay between reply extractions
 
     # ── NLP / Models ──────────────────────────────────────────
     device: str = "cpu"                  # "cpu" or "cuda"

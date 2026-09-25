@@ -83,6 +83,11 @@ class ScraperTestRequest(BaseModel):
     query: str = Field(..., description="Keyword, hashtag, or handle to search")
     limit: int = Field(10, ge=1, le=50, description="Max tweets to fetch")
     since: Optional[str] = Field(None, description="Since date (YYYY-MM-DD)")
+    scrape_comments: bool = Field(False, description="Whether to also scrape comments/replies for each post")
+    comments_limit: int = Field(5, ge=1, le=50, description="Max comments to fetch per post")
+    # Time window filters — overrides 'since' when provided
+    time_offset_hours: Optional[float] = Field(None, ge=0.0, description="Fetch posts from N hours ago to now (e.g. 0.5 = last 30 min)")
+    older_than_hours: Optional[float] = Field(None, ge=0.0, description="Fetch posts older than N hours (e.g. 0.5 = posts before 30 min ago)")
 
 
 class IngestRunRequest(BaseModel):
@@ -90,10 +95,52 @@ class IngestRunRequest(BaseModel):
     query: str = Field(..., description="Keyword or hashtag")
     since: Optional[str] = Field(None, description="Since date (YYYY-MM-DD)")
     limit: int = Field(50, ge=1, le=200)
+    scrape_comments: bool = Field(True, description="Whether to also scrape comments for each post")
+    comments_limit: int = Field(10, ge=1, le=50, description="Max comments per post")
+    time_offset_hours: Optional[float] = Field(None, ge=0.0, description="Fetch posts from N hours ago to now")
+    older_than_hours: Optional[float] = Field(None, ge=0.0, description="Fetch posts older than N hours")
+
+
+class PostCommentsRequest(BaseModel):
+    post_id: int = Field(..., description="Post snowflake ID to fetch comments for")
+    limit: int = Field(10, ge=1, le=50, description="Max comments to fetch")
 
 
 class AccountsUpdateRequest(BaseModel):
     content: str
+
+
+def format_scraped_tweet_dict(tweet, comments=None) -> dict:
+    """Helper to consistently format a ScrapedTweet dataclass into an API-friendly dictionary."""
+    return {
+        "post_id": tweet.post_id,
+        "user_id": tweet.user_id,
+        "text": tweet.text,
+        "created_at": tweet.created_at.isoformat() if tweet.created_at else None,
+        "lang": tweet.lang,
+        "like_count": tweet.like_count,
+        "retweet_count": tweet.retweet_count,
+        "reply_count": tweet.reply_count,
+        "quote_count": tweet.quote_count,
+        "is_retweet": tweet.is_retweet,
+        "is_quote": tweet.is_quote,
+        "is_reply": tweet.is_reply,
+        "in_reply_to_post_id": tweet.in_reply_to_post_id,
+        "in_reply_to_user_id": tweet.in_reply_to_user_id,
+        "hashtags": tweet.hashtags,
+        "mentions": tweet.mentions,
+        "comments": comments or [],
+        "user": {
+            "user_id": tweet.user.user_id,
+            "handle": tweet.user.handle,
+            "display_name": tweet.user.display_name,
+            "bio": tweet.user.bio,
+            "location_raw": tweet.user.location_raw,
+            "followers_count": tweet.user.followers_count,
+            "following_count": tweet.user.following_count,
+            "verified": tweet.user.verified,
+        } if tweet.user else None,
+    }
 
 
 @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
@@ -133,7 +180,7 @@ async def get_scraper_status():
 async def run_scraper_test(req: ScraperTestRequest):
     """
     Executes a live search query using the unofficial twscrape client.
-    Returns scraped tweet objects, extracted entities, derived edges, and latency.
+    Returns scraped tweet objects, comments (if enabled), extracted entities, derived edges, and latency.
     """
     acc_path = Path(settings.accounts_file)
     if not acc_path.exists():
@@ -149,37 +196,45 @@ async def run_scraper_test(req: ScraperTestRequest):
     edges_data = []
 
     try:
-        async for tweet in scraper_client.search(query=req.query, limit=req.limit, since=req.since):
-            # Format tweet
-            tweet_dict = {
-                "post_id": tweet.post_id,
-                "user_id": tweet.user_id,
-                "text": tweet.text,
-                "created_at": tweet.created_at.isoformat() if tweet.created_at else None,
-                "lang": tweet.lang,
-                "like_count": tweet.like_count,
-                "retweet_count": tweet.retweet_count,
-                "reply_count": tweet.reply_count,
-                "quote_count": tweet.quote_count,
-                "is_retweet": tweet.is_retweet,
-                "is_quote": tweet.is_quote,
-                "is_reply": tweet.is_reply,
-                "hashtags": tweet.hashtags,
-                "mentions": tweet.mentions,
-                "user": {
-                    "user_id": tweet.user.user_id,
-                    "handle": tweet.user.handle,
-                    "display_name": tweet.user.display_name,
-                    "bio": tweet.user.bio,
-                    "location_raw": tweet.user.location_raw,
-                    "followers_count": tweet.user.followers_count,
-                    "following_count": tweet.user.following_count,
-                    "verified": tweet.user.verified,
-                } if tweet.user else None
-            }
+        async for tweet in scraper_client.search(
+            query=req.query, limit=req.limit, since=req.since,
+            time_offset_hours=req.time_offset_hours,
+            older_than_hours=req.older_than_hours,
+        ):
+            # Optional: scrape comments for this tweet
+            tweet_comments = []
+            if req.scrape_comments and (tweet.reply_count > 0 or tweet.reply_count is None):
+                try:
+                    async for comment in scraper_client.get_replies(
+                        tweet.post_id, limit=req.comments_limit,
+                        time_offset_hours=req.time_offset_hours,
+                        older_than_hours=req.older_than_hours,
+                    ):
+                        if not comment.in_reply_to_post_id:
+                            comment.in_reply_to_post_id = tweet.post_id
+                        if not comment.in_reply_to_user_id and tweet.user:
+                            comment.in_reply_to_user_id = tweet.user.user_id
+                        c_dict = format_scraped_tweet_dict(comment)
+                        tweet_comments.append(c_dict)
+
+                        # Derive reply edge from comment
+                        c_edges = derive_edges_from_tweet(comment)
+                        for e in c_edges:
+                            edges_data.append({
+                                "source_user_id": e["source_user_id"],
+                                "target_user_id": e["target_user_id"],
+                                "edge_type": e["edge_type"],
+                                "post_id": e["post_id"],
+                                "created_at": e["created_at"].isoformat() if hasattr(e["created_at"], "isoformat") else str(e["created_at"])
+                            })
+                except Exception as c_ex:
+                    logger.warning("scrape_comments_warning", post_id=tweet.post_id, error=str(c_ex))
+
+            # Format tweet with its comments
+            tweet_dict = format_scraped_tweet_dict(tweet, comments=tweet_comments)
             tweets_data.append(tweet_dict)
 
-            # Derive edges
+            # Derive edges from parent post
             derived = derive_edges_from_tweet(tweet)
             for e in derived:
                 edges_data.append({
@@ -232,14 +287,145 @@ async def trigger_ingest(req: IngestRunRequest, background_tasks: BackgroundTask
     Triggers an asynchronous scraping run over a keyword/hashtag.
     """
     from ingestion.run import run_search
-    background_tasks.add_task(run_search, req.query, req.limit, req.since)
+    background_tasks.add_task(
+        run_search,
+        req.query,
+        req.limit,
+        req.since,
+        req.scrape_comments,
+        req.comments_limit,
+    )
     return {
         "status": "accepted",
         "mode": req.mode,
         "query": req.query,
         "limit": req.limit,
-        "message": f"Ingestion job started in background for query '{req.query}'",
+        "scrape_comments": req.scrape_comments,
+        "comments_limit": req.comments_limit,
+        "message": f"Ingestion job started in background for query '{req.query}' (scrape_comments={req.scrape_comments})",
     }
+
+
+# ── Comments Specific Endpoints ───────────────────────────────
+@app.post("/api/scraper/comments", tags=["Scraper Studio"])
+async def scrape_post_comments(req: PostCommentsRequest):
+    """
+    Scrapes live replies/comments for a specific post snowflake ID.
+    Returns comments, commenter metadata, sentiment (if enabled), and interaction edges.
+    """
+    acc_path = Path(settings.accounts_file)
+    if not acc_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="accounts.txt is missing. Scraper credentials required."
+        )
+
+    await scraper_client.initialize()
+    comments_data = []
+    edges_data = []
+
+    sentiment_engine = None
+    try:
+        from analytics.sentiment import get_sentiment_engine
+        sentiment_engine = get_sentiment_engine(device=settings.device)
+    except Exception as se_err:
+        logger.debug("sentiment_engine_optional_notice", error=str(se_err))
+
+    try:
+        async for comment in scraper_client.get_replies(post_id=req.post_id, limit=req.limit):
+            c_dict = format_scraped_tweet_dict(comment)
+
+            # Score sentiment for comment if engine available
+            if sentiment_engine and comment.text:
+                try:
+                    s_res = sentiment_engine.score_text(comment.text)
+                    c_dict["sentiment"] = {
+                        "label": s_res.sentiment_label,
+                        "score": s_res.sentiment_score,
+                        "emotion": s_res.emotion_label,
+                        "emotion_score": s_res.emotion_score,
+                        "sarcasm_prob": s_res.is_sarcastic_prob,
+                        "detected_language": s_res.detected_language,
+                        "translated_text": s_res.translated_text,
+                    }
+                except Exception:
+                    pass
+
+            comments_data.append(c_dict)
+
+            # Derive edges
+            c_edges = derive_edges_from_tweet(comment)
+            for e in c_edges:
+                edges_data.append({
+                    "source_user_id": e["source_user_id"],
+                    "target_user_id": e["target_user_id"],
+                    "edge_type": e["edge_type"],
+                    "post_id": e["post_id"],
+                    "created_at": e["created_at"].isoformat() if hasattr(e["created_at"], "isoformat") else str(e["created_at"])
+                })
+
+        return {
+            "status": "success",
+            "post_id": req.post_id,
+            "count": len(comments_data),
+            "comments": comments_data,
+            "edges": edges_data,
+        }
+    except CircuitBreakerOpenError as cb_err:
+        raise HTTPException(status_code=429, detail=str(cb_err))
+    except Exception as ex:
+        logger.error("scrape_comments_error", post_id=req.post_id, error=str(ex))
+        raise HTTPException(status_code=500, detail=f"Error scraping comments: {str(ex)}")
+
+
+@app.get("/api/posts/{post_id}/comments", tags=["Ingestion"])
+async def get_stored_comments(post_id: int):
+    """
+    Retrieves stored comments/replies for a post from the database.
+    """
+    try:
+        from db.session import get_async_session
+        from db.models import Post
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        async with get_async_session() as session:
+            stmt = (
+                select(Post)
+                .where(Post.in_reply_to_post_id == post_id)
+                .options(selectinload(Post.user), selectinload(Post.sentiment))
+                .order_by(Post.created_at.asc())
+            )
+            res = await session.execute(stmt)
+            posts = res.scalars().all()
+
+            results = []
+            for p in posts:
+                results.append({
+                    "post_id": p.post_id,
+                    "user_id": p.user_id,
+                    "text": p.text,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "like_count": p.like_count,
+                    "reply_count": p.reply_count,
+                    "in_reply_to_post_id": p.in_reply_to_post_id,
+                    "user": {
+                        "user_id": p.user.user_id,
+                        "handle": p.user.handle,
+                        "display_name": p.user.display_name,
+                        "verified": p.user.verified,
+                    } if p.user else None,
+                    "sentiment": {
+                        "label": p.sentiment.sentiment_label,
+                        "score": p.sentiment.sentiment_score,
+                        "emotion": p.sentiment.emotion_label,
+                        "emotion_score": p.sentiment.emotion_score,
+                    } if p.sentiment else None,
+                })
+            return {"post_id": post_id, "count": len(results), "comments": results}
+    except Exception as ex:
+        logger.error("get_stored_comments_error", post_id=post_id, error=str(ex))
+        raise HTTPException(status_code=500, detail=f"Database query error: {str(ex)}")
 
 
 # ── Sentiment Analysis Endpoints ──────────────────────────────
@@ -281,7 +467,7 @@ async def analyze_sentiment(req: SentimentAnalyzeRequest):
 async def run_scraper_test_full(req: ScraperTestRequest):
     """
     Executes a live scrape AND runs sentiment + demographics analysis on the results.
-    Returns tweets with sentiment scores, edges, and aggregated demographics.
+    Returns tweets with sentiment scores, comments (with sentiment), edges, and aggregated demographics.
     """
     acc_path = Path(settings.accounts_file)
     if not acc_path.exists():
@@ -298,33 +484,40 @@ async def run_scraper_test_full(req: ScraperTestRequest):
     user_profiles = []
 
     try:
-        async for tweet in scraper_client.search(query=req.query, limit=req.limit, since=req.since):
-            tweet_dict = {
-                "post_id": tweet.post_id,
-                "user_id": tweet.user_id,
-                "text": tweet.text,
-                "created_at": tweet.created_at.isoformat() if tweet.created_at else None,
-                "lang": tweet.lang,
-                "like_count": tweet.like_count,
-                "retweet_count": tweet.retweet_count,
-                "reply_count": tweet.reply_count,
-                "quote_count": tweet.quote_count,
-                "is_retweet": tweet.is_retweet,
-                "is_quote": tweet.is_quote,
-                "is_reply": tweet.is_reply,
-                "hashtags": tweet.hashtags,
-                "mentions": tweet.mentions,
-                "user": {
-                    "user_id": tweet.user.user_id,
-                    "handle": tweet.user.handle,
-                    "display_name": tweet.user.display_name,
-                    "bio": tweet.user.bio,
-                    "location_raw": tweet.user.location_raw,
-                    "followers_count": tweet.user.followers_count,
-                    "following_count": tweet.user.following_count,
-                    "verified": tweet.user.verified,
-                } if tweet.user else None
-            }
+        async for tweet in scraper_client.search(
+            query=req.query, limit=req.limit, since=req.since,
+            time_offset_hours=req.time_offset_hours,
+            older_than_hours=req.older_than_hours,
+        ):
+            tweet_comments = []
+            if req.scrape_comments and (tweet.reply_count > 0 or tweet.reply_count is None):
+                try:
+                    async for comment in scraper_client.get_replies(
+                        tweet.post_id, limit=req.comments_limit,
+                        time_offset_hours=req.time_offset_hours,
+                        older_than_hours=req.older_than_hours,
+                    ):
+                        if not comment.in_reply_to_post_id:
+                            comment.in_reply_to_post_id = tweet.post_id
+                        if not comment.in_reply_to_user_id and tweet.user:
+                            comment.in_reply_to_user_id = tweet.user.user_id
+                        c_dict = format_scraped_tweet_dict(comment)
+                        tweet_comments.append(c_dict)
+
+                        # Derive reply edge from comment
+                        c_edges = derive_edges_from_tweet(comment)
+                        for e in c_edges:
+                            edges_data.append({
+                                "source_user_id": e["source_user_id"],
+                                "target_user_id": e["target_user_id"],
+                                "edge_type": e["edge_type"],
+                                "post_id": e["post_id"],
+                                "created_at": e["created_at"].isoformat() if hasattr(e["created_at"], "isoformat") else str(e["created_at"])
+                            })
+                except Exception as c_ex:
+                    logger.warning("full_test_comment_warning", post_id=tweet.post_id, error=str(c_ex))
+
+            tweet_dict = format_scraped_tweet_dict(tweet, comments=tweet_comments)
             tweets_data.append(tweet_dict)
             tweet_texts.append(tweet.text)
 
@@ -361,6 +554,25 @@ async def run_scraper_test_full(req: ScraperTestRequest):
                     "translated_text": result.translated_text,
                 }
                 sentiment_results.append(result)
+
+            # Also score sentiment for all scraped comments
+            for td in tweets_data:
+                for c in td.get("comments", []):
+                    c_text = c.get("text", "")
+                    if c_text:
+                        try:
+                            c_res = engine.score_text(c_text)
+                            c["sentiment"] = {
+                                "label": c_res.sentiment_label,
+                                "score": c_res.sentiment_score,
+                                "emotion": c_res.emotion_label,
+                                "emotion_score": c_res.emotion_score,
+                                "sarcasm_prob": c_res.is_sarcastic_prob,
+                                "detected_language": c_res.detected_language,
+                                "translated_text": c_res.translated_text,
+                            }
+                        except Exception:
+                            pass
 
         except Exception as ex:
             logger.warning("sentiment_analysis_skipped", error=str(ex))

@@ -15,11 +15,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const sessionEdgesCount = document.getElementById('session-edges-count');
   const lastLatencyVal = document.getElementById('last-latency-val');
 
-  // Form Elements
   const scraperForm = document.getElementById('scraper-form');
   const queryInput = document.getElementById('query-input');
   const limitInput = document.getElementById('limit-input');
-  const sinceInput = document.getElementById('since-input');
+  const commentsLimitInput = document.getElementById('comments-limit-input');
+  const chkComments = document.getElementById('chk-comments');
   const chkSentiment = document.getElementById('chk-sentiment');
   const chkDemographics = document.getElementById('chk-demographics');
   const chkTrends = document.getElementById('chk-trends');
@@ -27,6 +27,50 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRunScrape = document.getElementById('btn-run-scrape');
   const btnSpinner = document.getElementById('btn-spinner');
   const btnText = document.getElementById('btn-text');
+
+  // Time Window Controls
+  const timeModeButtons = document.querySelectorAll('.time-tab');
+  const timePanels = { none: document.getElementById('time-panel-none'), offset: document.getElementById('time-panel-offset'), older: document.getElementById('time-panel-older'), date: document.getElementById('time-panel-date') };
+  const offsetHoursRange = document.getElementById('offset-hours-range');
+  const offsetHoursVal = document.getElementById('offset-hours-val');
+  const offsetHintText = document.getElementById('offset-hint-text');
+  const olderHoursRange = document.getElementById('older-hours-range');
+  const olderHoursVal = document.getElementById('older-hours-val');
+  const olderHintText = document.getElementById('older-hint-text');
+  let activeTimeMode = 'none';
+
+  // Time mode tab switching
+  timeModeButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      timeModeButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTimeMode = btn.getAttribute('data-mode');
+      Object.keys(timePanels).forEach(k => {
+        if (timePanels[k]) timePanels[k].style.display = (k === activeTimeMode) ? '' : 'none';
+      });
+    });
+  });
+
+  function hoursLabel(h) {
+    if (h < 1) return Math.round(h * 60) + ' minutes';
+    return h + ' hour' + (h === 1 ? '' : 's');
+  }
+
+  if (offsetHoursRange) {
+    offsetHoursRange.addEventListener('input', () => {
+      const h = parseFloat(offsetHoursRange.value);
+      offsetHoursVal.textContent = h + ' hrs';
+      if (offsetHintText) offsetHintText.textContent = hoursLabel(h);
+    });
+  }
+
+  if (olderHoursRange) {
+    olderHoursRange.addEventListener('input', () => {
+      const h = parseFloat(olderHoursRange.value);
+      olderHoursVal.textContent = h + ' hrs';
+      if (olderHintText) olderHintText.textContent = hoursLabel(h);
+    });
+  }
 
   // Console Elements
   const consoleOutput = document.getElementById('console-output');
@@ -184,7 +228,21 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const query = queryInput.value.trim();
     const limit = parseInt(limitInput.value, 10) || 10;
-    const since = sinceInput.value || null;
+    const scrapeComments = chkComments ? chkComments.checked : true;
+    const commentsLimit = commentsLimitInput ? parseInt(commentsLimitInput.value, 10) || 5 : 5;
+
+    // Resolve time window params
+    let since = null;
+    let time_offset_hours = null;
+    let older_than_hours = null;
+    if (activeTimeMode === 'offset') {
+      time_offset_hours = parseFloat(offsetHoursRange?.value || '0.5');
+    } else if (activeTimeMode === 'older') {
+      older_than_hours = parseFloat(olderHoursRange?.value || '0.5');
+    } else if (activeTimeMode === 'date') {
+      const sinceInput = document.getElementById('since-input');
+      since = sinceInput?.value || null;
+    }
 
     if (!query) {
       alert('Please enter a search query or hashtag.');
@@ -198,14 +256,23 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSpinner.style.display = 'inline-block';
     btnText.textContent = runFull ? 'Running Full Intelligence Suite...' : 'Scraping live public X...';
 
-    addLog(`Starting pipeline: query="${query}" limit=${limit} mode=${runFull ? 'Full 4-Engine Analytics' : 'Scrape Only'}`, 'info');
+    const timeDesc = activeTimeMode === 'offset' ? ` [from ${hoursLabel(time_offset_hours)} ago]` : activeTimeMode === 'older' ? ` [older than ${hoursLabel(older_than_hours)}]` : activeTimeMode === 'date' && since ? ` [since ${since}]` : ' [latest]';
+    addLog(`Starting pipeline: query="${query}" limit=${limit} comments=${scrapeComments ? commentsLimit + '/post' : 'off'} mode=${runFull ? 'Full 4-Engine Analytics' : 'Scrape Only'}${timeDesc}`, 'info');
     const startTime = performance.now();
 
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit, since })
+        body: JSON.stringify({
+          query,
+          limit,
+          since,
+          time_offset_hours,
+          older_than_hours,
+          scrape_comments: scrapeComments,
+          comments_limit: commentsLimit,
+        })
       });
 
       const latency = ((performance.now() - startTime) / 1000).toFixed(2);
@@ -218,10 +285,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       currentScrapedData = result;
-      addLog(`Pipeline complete! Retrieved ${result.tweets.length} tweets in ${latency}s.`, 'success');
+
+      // Calculate comments count
+      let totalComments = 0;
+      (result.tweets || []).forEach(t => {
+        if (t.comments && t.comments.length) totalComments += t.comments.length;
+      });
+
+      addLog(`Pipeline complete! Retrieved ${result.tweets.length} tweets & ${totalComments} comments in ${latency}s.`, 'success');
 
       // Update metrics
-      sessionCountBadge.textContent = `${result.tweets.length} Items`;
+      sessionCountBadge.textContent = `${result.tweets.length} Posts`;
       feedCount.textContent = result.tweets.length;
       edgesCount.textContent = (result.edges || []).length;
       sessionEdgesCount.textContent = `${(result.edges || []).length} Edges`;
@@ -315,7 +389,70 @@ document.addEventListener('DOMContentLoaded', () => {
         tagsHtml += tweet.mentions.map(m => `<span class="tag-pill tag-mention">@${escapeHtml(m)}</span>`).join('');
       }
 
-      card.innerHTML = `
+        // Render Comments Section
+        const comments = tweet.comments || [];
+        const commentsCount = comments.length;
+        let commentsSectionHtml = '';
+
+        if (commentsCount > 0) {
+          const commentsListHtml = comments.map(c => {
+            const cu = c.user || {};
+            const cInitials = (cu.display_name || cu.handle || 'C').substring(0, 2).toUpperCase();
+            const cVerified = cu.verified ? '<span class="verified-check" title="Verified">✓</span>' : '';
+            const cDate = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            let cSentBadge = '';
+            if (c.sentiment) {
+              cSentBadge = `<span class="comment-sentiment-badge sentiment-${c.sentiment.label}">${c.sentiment.label.toUpperCase()} • ${c.sentiment.emotion}</span>`;
+            }
+
+            return `
+              <div class="comment-item">
+                <div class="comment-avatar">${cInitials}</div>
+                <div class="comment-body-wrapper">
+                  <div class="comment-meta">
+                    <span class="comment-name">${escapeHtml(cu.display_name || cu.handle || 'Anonymous')} ${cVerified}</span>
+                    <span class="comment-handle">@${escapeHtml(cu.handle || 'user')}</span>
+                    <span class="comment-time">${cDate}</span>
+                    ${cSentBadge}
+                  </div>
+                  <div class="comment-text">${escapeHtml(c.text)}</div>
+                  <div class="comment-stats">
+                    <span>❤️ ${c.like_count || 0}</span>
+                    <span>💬 ${c.reply_count || 0}</span>
+                    <span style="font-family: var(--font-mono); font-size: 0.68rem; margin-left: auto;">ID: ${c.post_id}</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          commentsSectionHtml = `
+            <div class="tweet-comments-container">
+              <button type="button" class="btn-toggle-comments" data-post-id="${tweet.post_id}">
+                <span class="toggle-icon">💬</span>
+                <span class="toggle-text">Comments (${commentsCount})</span>
+                <span class="toggle-arrow">▼</span>
+              </button>
+              <div class="tweet-comments-drawer open" id="drawer-${tweet.post_id}">
+                ${commentsListHtml}
+              </div>
+            </div>
+          `;
+        } else {
+          commentsSectionHtml = `
+            <div class="tweet-comments-container">
+              <div class="comments-actions-bar">
+                <button type="button" class="btn-scrape-comments-live" data-post-id="${tweet.post_id}">
+                  <span>💬</span>
+                  <span>Scrape Comments on this Post</span>
+                </button>
+              </div>
+              <div class="tweet-comments-drawer" id="drawer-${tweet.post_id}" style="display: none;"></div>
+            </div>
+          `;
+        }
+
+        card.innerHTML = `
         <div class="tweet-header">
           <div class="tweet-author-info">
             <div class="avatar-placeholder">${initials}</div>
@@ -344,11 +481,103 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="tweet-stat" title="Quotes">📑 ${tweet.quote_count || 0}</span>
           <span class="tweet-stat" style="margin-left: auto; font-family: var(--font-mono); font-size: 0.7rem;">ID: ${tweet.post_id}</span>
         </div>
+        ${commentsSectionHtml}
       `;
 
       tweetStream.appendChild(card);
     });
   }
+
+  // Handle click on comments toggle and live scraping
+  tweetStream.addEventListener('click', async (e) => {
+    const toggleBtn = e.target.closest('.btn-toggle-comments');
+    if (toggleBtn) {
+      const postId = toggleBtn.getAttribute('data-post-id');
+      const drawer = document.getElementById(`drawer-${postId}`);
+      if (drawer) {
+        const isHidden = drawer.style.display === 'none' || !drawer.classList.contains('open');
+        if (isHidden) {
+          drawer.style.display = 'flex';
+          drawer.classList.add('open');
+          const arrow = toggleBtn.querySelector('.toggle-arrow');
+          if (arrow) arrow.textContent = '▼';
+        } else {
+          drawer.style.display = 'none';
+          drawer.classList.remove('open');
+          const arrow = toggleBtn.querySelector('.toggle-arrow');
+          if (arrow) arrow.textContent = '▶';
+        }
+      }
+      return;
+    }
+
+    const scrapeBtn = e.target.closest('.btn-scrape-comments-live');
+    if (scrapeBtn) {
+      const postId = scrapeBtn.getAttribute('data-post-id');
+      const drawer = document.getElementById(`drawer-${postId}`);
+      if (!postId || !drawer) return;
+
+      scrapeBtn.disabled = true;
+      scrapeBtn.innerHTML = `<span>⏳</span><span>Scraping comments...</span>`;
+      addLog(`Initiating live comment extraction for Tweet ID ${postId}...`, 'info');
+
+      try {
+        const cRes = await fetch('/api/scraper/comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ post_id: parseInt(postId, 10), limit: 10 })
+        });
+        const cData = await cRes.json();
+        if (!cRes.ok) throw new Error(cData.detail || 'Failed to scrape comments');
+
+        if (cData.comments && cData.comments.length > 0) {
+          addLog(`Retrieved ${cData.comments.length} comments for Tweet ID ${postId}!`, 'success');
+          drawer.innerHTML = cData.comments.map(c => {
+            const cu = c.user || {};
+            const cInitials = (cu.display_name || cu.handle || 'C').substring(0, 2).toUpperCase();
+            const cVerified = cu.verified ? '<span class="verified-check" title="Verified">✓</span>' : '';
+            const cDate = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            let cSentBadge = '';
+            if (c.sentiment) {
+              cSentBadge = `<span class="comment-sentiment-badge sentiment-${c.sentiment.label}">${c.sentiment.label.toUpperCase()} • ${c.sentiment.emotion}</span>`;
+            }
+            return `
+              <div class="comment-item">
+                <div class="comment-avatar">${cInitials}</div>
+                <div class="comment-body-wrapper">
+                  <div class="comment-meta">
+                    <span class="comment-name">${escapeHtml(cu.display_name || cu.handle || 'Anonymous')} ${cVerified}</span>
+                    <span class="comment-handle">@${escapeHtml(cu.handle || 'user')}</span>
+                    <span class="comment-time">${cDate}</span>
+                    ${cSentBadge}
+                  </div>
+                  <div class="comment-text">${escapeHtml(c.text)}</div>
+                  <div class="comment-stats">
+                    <span>❤️ ${c.like_count || 0}</span>
+                    <span>💬 ${c.reply_count || 0}</span>
+                    <span style="font-family: var(--font-mono); font-size: 0.68rem; margin-left: auto;">ID: ${c.post_id}</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+          drawer.style.display = 'flex';
+          drawer.classList.add('open');
+          scrapeBtn.innerHTML = `<span>💬</span><span>Comments (${cData.comments.length})</span><span class="toggle-arrow">▼</span>`;
+          scrapeBtn.classList.remove('btn-scrape-comments-live');
+          scrapeBtn.classList.add('btn-toggle-comments');
+          scrapeBtn.disabled = false;
+        } else {
+          scrapeBtn.innerHTML = `<span>ℹ️</span><span>No public comments found</span>`;
+          addLog(`No comments found for Tweet ID ${postId}.`, 'info');
+        }
+      } catch (err) {
+        scrapeBtn.disabled = false;
+        scrapeBtn.innerHTML = `<span>⚠️</span><span>Retry Comments Scrape</span>`;
+        addLog(`Error scraping comments: ${err.message}`, 'error');
+      }
+    }
+  });
 
   // Render Graph Edges
   function renderEdges(edges) {

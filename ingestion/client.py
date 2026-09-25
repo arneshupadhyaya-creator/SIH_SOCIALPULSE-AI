@@ -27,15 +27,47 @@ import os
 import random
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import AsyncGenerator, Dict, List, Optional, Union
 
 from config import get_settings
 from ingestion.models import ScrapedTweet, ScrapedUser
 from logging_config import get_logger
 
 logger = get_logger("ingestion.client")
+
+
+def parse_datetime_flexible(val: Optional[Union[str, datetime, int, float]]) -> Optional[datetime]:
+    """
+    Flexibly parses a datetime input from strings (ISO, YYYY-MM-DD, epoch, etc.) into UTC datetime.
+    """
+    if not val:
+        return None
+    if isinstance(val, datetime):
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    if isinstance(val, (int, float)):
+        return datetime.fromtimestamp(val, tz=timezone.utc)
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        if s.replace(".", "", 1).isdigit():
+            return datetime.fromtimestamp(float(s), tz=timezone.utc)
+    except Exception:
+        pass
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%Y-%m-%d_%H:%M:%S_UTC"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+    return None
 
 
 class CircuitBreakerOpenError(Exception):
@@ -119,13 +151,29 @@ class ScraperClient(ABC):
         query: str,
         limit: int = 50,
         since: Optional[str] = None,
+        until: Optional[str] = None,
+        time_offset_hours: Optional[float] = None,
+        older_than_hours: Optional[float] = None,
     ) -> AsyncGenerator[ScrapedTweet, None]:
-        """Search public tweets matching a query."""
+        """Search public tweets matching a query with optional time filters."""
         pass
 
     @abstractmethod
     async def get_user(self, handle_or_id: str) -> Optional[ScrapedUser]:
         """Fetch public profile metadata for a user."""
+        pass
+
+    @abstractmethod
+    async def get_replies(
+        self,
+        post_id: int,
+        limit: int = 20,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
+        time_offset_hours: Optional[float] = None,
+        older_than_hours: Optional[float] = None,
+    ) -> AsyncGenerator[ScrapedTweet, None]:
+        """Fetch public reply comments for a specific post with optional time filters."""
         pass
 
     @abstractmethod
@@ -149,6 +197,9 @@ class TwscrapeClient(ScraperClient):
         self.pool_db = pool_db
         self.delay_min = settings.scrape_delay_min
         self.delay_max = settings.scrape_delay_max
+        self.scrape_comments = settings.scrape_comments
+        self.max_comments_per_post = settings.max_comments_per_post
+        self.comments_delay = settings.scrape_comments_delay
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=settings.circuit_breaker_threshold,
             recovery_timeout=settings.circuit_breaker_timeout,
@@ -262,6 +313,16 @@ class TwscrapeClient(ScraperClient):
         elif dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
 
+        # Extract reply information
+        is_reply = bool(getattr(tweet_obj, "inReplyToTweetId", None))
+        in_reply_to_post_id = int(getattr(tweet_obj, "inReplyToTweetId", 0)) if getattr(tweet_obj, "inReplyToTweetId", None) else None
+        in_reply_to_user_id = None
+        in_reply_to_user_obj = getattr(tweet_obj, "inReplyToUser", None)
+        if in_reply_to_user_obj and getattr(in_reply_to_user_obj, "id", None):
+            in_reply_to_user_id = int(in_reply_to_user_obj.id)
+        elif getattr(tweet_obj, "inReplyToUserId", None):
+            in_reply_to_user_id = int(getattr(tweet_obj, "inReplyToUserId", 0)) or None
+
         return ScrapedTweet(
             post_id=int(getattr(tweet_obj, "id", 0)),
             user_id=int(getattr(tweet_obj, "user", None).id if getattr(tweet_obj, "user", None) else 0),
@@ -274,9 +335,9 @@ class TwscrapeClient(ScraperClient):
             quote_count=int(getattr(tweet_obj, "quoteCount", 0) or 0),
             is_retweet=bool(getattr(tweet_obj, "retweetedTweet", None)),
             is_quote=bool(getattr(tweet_obj, "quotedTweet", None)),
-            is_reply=bool(getattr(tweet_obj, "inReplyToTweetId", None)),
-            in_reply_to_post_id=int(getattr(tweet_obj, "inReplyToTweetId", 0)) if getattr(tweet_obj, "inReplyToTweetId", None) else None,
-            in_reply_to_user_id=int(getattr(tweet_obj, "inReplyToUserId", 0)) if getattr(tweet_obj, "inReplyToUserId", None) else None,
+            is_reply=is_reply,
+            in_reply_to_post_id=in_reply_to_post_id,
+            in_reply_to_user_id=in_reply_to_user_id,
             hashtags=hashtags,
             mentions=mentions,
             user=user_model,
@@ -287,7 +348,15 @@ class TwscrapeClient(ScraperClient):
         query: str,
         limit: int = 50,
         since: Optional[str] = None,
+        until: Optional[str] = None,
+        time_offset_hours: Optional[float] = None,
+        older_than_hours: Optional[float] = None,
     ) -> AsyncGenerator[ScrapedTweet, None]:
+        """
+        Search public tweets matching a query.
+        Supports fetching historical/older tweets via 'until' or 'older_than_hours',
+        as well as sliding windows via 'since' or 'time_offset_hours' (e.g. 0.5 hours ago).
+        """
         if not self.circuit_breaker.can_execute():
             raise CircuitBreakerOpenError(
                 f"Circuit breaker is OPEN. Requests paused for {self.circuit_breaker.recovery_timeout}s."
@@ -300,18 +369,65 @@ class TwscrapeClient(ScraperClient):
         except Exception:
             pass
 
+        now = datetime.now(timezone.utc)
+        since_dt = parse_datetime_flexible(since)
+        until_dt = parse_datetime_flexible(until)
+
+        # Handle time_offset_hours (e.g. 0.5 hours ago to now)
+        if time_offset_hours is not None and time_offset_hours > 0:
+            since_dt = now - timedelta(hours=time_offset_hours)
+            if until_dt is None:
+                until_dt = now
+
+        # Handle older_than_hours (e.g. posts created before 0.5 hours ago)
+        if older_than_hours is not None and older_than_hours > 0:
+            until_dt = now - timedelta(hours=older_than_hours)
+
         final_query = query
-        if since:
-            final_query = f"{query} since:{since}"
+        # Add Twitter search time operators
+        if since_dt:
+            final_query = f"{final_query} since_time:{int(since_dt.timestamp())}"
+        elif since:
+            final_query = f"{final_query} since:{since}"
+
+        if until_dt:
+            final_query = f"{final_query} until_time:{int(until_dt.timestamp())}"
+        elif until:
+            final_query = f"{final_query} until:{until}"
 
         yielded = 0
         try:
             from twscrape import gather
-            raw_tweets = await gather(api.search(final_query, limit=limit))
+            # Primary search with time operators in query
+            try:
+                raw_tweets = await gather(api.search(final_query, limit=limit if not (since_dt or until_dt) else limit * 2))
+            except Exception as e:
+                logger.warning("time_operator_query_retry", query=final_query, error=str(e))
+                raw_tweets = []
+
+            # Fallback to standard query with python-side datetime filtering if specific operator returned 0
+            if not raw_tweets and (since_dt or until_dt):
+                try:
+                    fallback_query = query
+                    if since and not since_dt:
+                        fallback_query = f"{fallback_query} since:{since}"
+                    if until and not until_dt:
+                        fallback_query = f"{fallback_query} until:{until}"
+                    raw_tweets = await gather(api.search(fallback_query, limit=limit * 3))
+                except Exception:
+                    pass
+
             for tweet in raw_tweets:
-                if yielded >= limit:
+                if limit > 0 and yielded >= limit:
                     break
                 scraped = self._parse_tweet(tweet)
+
+                # Strict timestamp filtering
+                if since_dt and scraped.created_at < since_dt:
+                    continue
+                if until_dt and scraped.created_at > until_dt:
+                    continue
+
                 yield scraped
                 yielded += 1
 
@@ -353,6 +469,107 @@ class TwscrapeClient(ScraperClient):
             self.circuit_breaker.record_failure(error_type=type(exc).__name__)
             logger.error("get_user_failed", user=handle_or_id, error=str(exc))
             return None
+
+    async def get_replies(
+        self,
+        post_id: int,
+        limit: int = 20,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
+        time_offset_hours: Optional[float] = None,
+        older_than_hours: Optional[float] = None,
+    ) -> AsyncGenerator[ScrapedTweet, None]:
+        """
+        Fetch public comments/replies for a specific post.
+        Supports time filtering (e.g. comments from past 0.5 hours to now, or older than 0.5 hours).
+        """
+        if not self.circuit_breaker.can_execute():
+            raise CircuitBreakerOpenError(
+                f"Circuit breaker is OPEN. Requests paused for {self.circuit_breaker.recovery_timeout}s."
+            )
+
+        api = await self._get_api()
+        try:
+            await api.pool.reset_locks()
+        except Exception:
+            pass
+
+        now = datetime.now(timezone.utc)
+        since_dt = parse_datetime_flexible(since)
+        until_dt = parse_datetime_flexible(until)
+
+        if time_offset_hours is not None and time_offset_hours > 0:
+            since_dt = now - timedelta(hours=time_offset_hours)
+            if until_dt is None:
+                until_dt = now
+
+        if older_than_hours is not None and older_than_hours > 0:
+            until_dt = now - timedelta(hours=older_than_hours)
+
+        yielded = 0
+        seen_ids = set()
+        try:
+            from twscrape import gather
+            # 1. Primary extraction via tweet_replies endpoint
+            try:
+                fetch_limit = limit if not (since_dt or until_dt) else limit * 3
+                raw_replies = await gather(api.tweet_replies(post_id, limit=fetch_limit))
+            except Exception as e:
+                logger.warning("tweet_replies_endpoint_warn", post_id=post_id, error=str(e))
+                raw_replies = []
+
+            for rep in raw_replies:
+                if limit > 0 and yielded >= limit:
+                    break
+                if rep.id == post_id or rep.id in seen_ids:
+                    continue
+                seen_ids.add(rep.id)
+                scraped = self._parse_tweet(rep)
+                if not scraped.in_reply_to_post_id:
+                    scraped.in_reply_to_post_id = post_id
+                scraped.is_reply = True
+
+                # Apply time filtering to comments
+                if since_dt and scraped.created_at < since_dt:
+                    continue
+                if until_dt and scraped.created_at > until_dt:
+                    continue
+
+                yield scraped
+                yielded += 1
+
+            # 2. Resilient fallback: search conversation_id if no replies returned from GQL
+            if yielded == 0 and limit > 0:
+                try:
+                    raw_conv = await gather(api.search(f"conversation_id:{post_id}", limit=limit * 3))
+                    for tweet in raw_conv:
+                        if tweet.id == post_id or tweet.id in seen_ids:
+                            continue
+                        if limit > 0 and yielded >= limit:
+                            break
+                        seen_ids.add(tweet.id)
+                        scraped = self._parse_tweet(tweet)
+                        if not scraped.in_reply_to_post_id:
+                            scraped.in_reply_to_post_id = post_id
+                        scraped.is_reply = True
+
+                        if since_dt and scraped.created_at < since_dt:
+                            continue
+                        if until_dt and scraped.created_at > until_dt:
+                            continue
+
+                        yield scraped
+                        yielded += 1
+                except Exception as fb_err:
+                    logger.debug("conversation_fallback_notice", post_id=post_id, error=str(fb_err))
+
+            self.circuit_breaker.record_success()
+            if yielded > 0:
+                await asyncio.sleep(self.comments_delay)
+
+        except Exception as exc:
+            self.circuit_breaker.record_failure(error_type=type(exc).__name__)
+            logger.warning("get_replies_failed", post_id=post_id, error=str(exc))
 
     def get_pool_status(self) -> Dict[str, object]:
         return {

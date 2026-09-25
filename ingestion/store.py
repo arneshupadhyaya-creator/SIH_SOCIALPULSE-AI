@@ -129,6 +129,16 @@ async def insert_edge(session: AsyncSession, edge_data: dict) -> None:
     await session.execute(stmt)
 
 
+async def ensure_user_stub(session: AsyncSession, user_id: int, handle: Optional[str] = None) -> None:
+    """Idempotently ensure a minimal user stub exists so foreign key references in edges/posts don't fail."""
+    stmt = insert(User).values(
+        user_id=user_id,
+        handle=handle or f"user_{user_id}",
+        display_name=handle or f"User {user_id}",
+    ).on_conflict_do_nothing(index_elements=[User.user_id])
+    await session.execute(stmt)
+
+
 async def persist_tweet_pipeline(session: AsyncSession, tweet: ScrapedTweet) -> Tuple[bool, int]:
     """
     Complete idempotent persistence pipeline:
@@ -139,6 +149,11 @@ async def persist_tweet_pipeline(session: AsyncSession, tweet: ScrapedTweet) -> 
     """
     if tweet.user:
         await upsert_user(session, tweet.user)
+    elif tweet.user_id:
+        await ensure_user_stub(session, tweet.user_id)
+
+    if tweet.in_reply_to_user_id:
+        await ensure_user_stub(session, tweet.in_reply_to_user_id)
 
     is_new = await upsert_post(session, tweet)
 
